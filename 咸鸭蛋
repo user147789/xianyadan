@@ -1,0 +1,617 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+-- 创建主窗口
+local Window = Rayfield:CreateWindow({
+    Name = "鸭蛋脚本",
+    LoadingTitle = "加载中...",
+    LoadingSubtitle = "鸭蛋脚本",
+    ConfigurationSaving = {
+        Enabled = false,
+    },
+    -- 手机优化设置
+    MobileOptimized = true,
+    TouchScreenSupport = true,
+    DragTolerance = 12,
+})
+
+-- 创建标签页
+local Tab1 = Window:CreateTab("鸭蛋OS")
+local Tab2 = Window:CreateTab("鸭蛋SO")
+
+-- 无限跳跃功能变量
+local infiniteJumpEnabled = false
+local jumpConnection = nil
+
+-- 夜视功能变量 - 全面优化以穿透黑色迷雾
+local nightVisionEnabled = false
+local nightVisionBrightness = 5
+local nightVisionContrast = 0.5  -- 新增对比度变量
+local originalLightingSettings = {
+    Ambient = Lighting.Ambient,
+    Brightness = Lighting.Brightness,
+    FogEnd = Lighting.FogEnd,
+    FogStart = Lighting.FogStart,
+    FogColor = Lighting.FogColor,
+    GlobalShadows = Lighting.GlobalShadows,
+    ClockTime = Lighting.ClockTime
+}
+
+-- ESP功能变量
+local espEnabled = false
+local espObjects = {}
+local currentEspColor = Color3.fromRGB(255, 0, 0)
+local distanceUpdateConnection = nil
+local playerScanConnection = nil
+
+-- 穿墙功能变量
+local noclipEnabled = false
+local noclipConnection = nil
+
+-- 全面优化的夜视效果函数 - 穿透黑色迷雾
+local function updateNightVision()
+    if nightVisionEnabled then
+        -- 保存原始设置
+        originalLightingSettings = {
+            Ambient = Lighting.Ambient,
+            Brightness = Lighting.Brightness,
+            FogEnd = Lighting.FogEnd,
+            FogStart = Lighting.FogStart,
+            FogColor = Lighting.FogColor,
+            GlobalShadows = Lighting.GlobalShadows,
+            ClockTime = Lighting.ClockTime
+        }
+        
+        -- 消除黑色迷雾的核心设置
+        Lighting.Ambient = Color3.new(1, 1, 1)  -- 全白环境光
+        Lighting.Brightness = nightVisionBrightness
+        Lighting.FogEnd = 1000000  -- 极大可视距离
+        Lighting.FogStart = 0  -- 无雾起始距离
+        Lighting.FogColor = Color3.new(1, 1, 1)  -- 白色雾效
+        Lighting.GlobalShadows = false  -- 禁用阴影
+        Lighting.ClockTime = 12  -- 正午时间
+        
+        -- 移除所有可能影响视效的后期处理
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") then
+                effect.Enabled = false
+            end
+        end
+        
+        -- 创建雾效过滤器 - 无绿色调
+        if not Lighting:FindFirstChild("FogFilter_NightVision") then
+            local fogFilter = Instance.new("Atmosphere")
+            fogFilter.Name = "FogFilter_NightVision"
+            fogFilter.Density = 0.01  -- 极低密度减少迷雾影响
+            fogFilter.Color = Color3.new(1, 1, 1)  -- 白色雾效（无绿色调）
+            fogFilter.Parent = Lighting
+        end
+        
+        -- 创建光晕效果 - 增强穿透力
+        if not Lighting:FindFirstChild("Bloom_NightVision") then
+            local bloom = Instance.new("BloomEffect")
+            bloom.Name = "Bloom_NightVision"
+            bloom.Intensity = 0.4  -- 增强光晕效果穿透黑暗
+            bloom.Size = 24  -- 适当的光晕大小
+            bloom.Threshold = 0.6  -- 光晕阈值
+            bloom.Parent = Lighting
+        end
+        
+        -- 创建无偏色的夜视效果
+        if not Lighting:FindFirstChild("ColorCorrection_NightVision") then
+            local colorCorrection = Instance.new("ColorCorrectionEffect")
+            colorCorrection.Name = "ColorCorrection_NightVision"
+            colorCorrection.Contrast = nightVisionContrast  -- 使用对比度变量
+            colorCorrection.Saturation = 0
+            colorCorrection.TintColor = Color3.new(1, 1, 1)  -- 无偏色
+            colorCorrection.Parent = Lighting
+        else
+            -- 更新现有效果的对比度
+            local colorCorrection = Lighting:FindFirstChild("ColorCorrection_NightVision")
+            if colorCorrection then
+                colorCorrection.Contrast = nightVisionContrast
+            end
+        end
+    else
+        -- 恢复原始设置
+        Lighting.Ambient = originalLightingSettings.Ambient
+        Lighting.Brightness = originalLightingSettings.Brightness
+        Lighting.FogEnd = originalLightingSettings.FogEnd
+        Lighting.FogStart = originalLightingSettings.FogStart
+        Lighting.FogColor = originalLightingSettings.FogColor
+        Lighting.GlobalShadows = originalLightingSettings.GlobalShadows
+        Lighting.ClockTime = originalLightingSettings.ClockTime
+        
+        -- 恢复后期处理
+        for _, effect in ipairs(Lighting:GetChildren()) do
+            if effect:IsA("PostEffect") then
+                effect.Enabled = true
+            end
+        end
+        
+        -- 移除夜视特效
+        local fogFilter = Lighting:FindFirstChild("FogFilter_NightVision")
+        if fogFilter then fogFilter:Destroy() end
+        
+        local bloom = Lighting:FindFirstChild("Bloom_NightVision")
+        if bloom then bloom:Destroy() end
+        
+        local colorCorrection = Lighting:FindFirstChild("ColorCorrection_NightVision")
+        if colorCorrection then colorCorrection:Destroy() end
+    end
+end
+
+-- 计算距离并显示
+local function updateDistanceLabels()
+    if not espEnabled then return end
+    
+    local localPlayer = Players.LocalPlayer
+    if not localPlayer or not localPlayer.Character then return end
+    
+    local localRoot = localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not localRoot then return end
+    
+    local localPosition = localRoot.Position
+    
+    for player, espData in pairs(espObjects) do
+        if player ~= localPlayer and player.Character and espData.nameLabel then
+            local charRoot = player.Character:FindFirstChild("HumanoidRootPart")
+            local head = player.Character:FindFirstChild("Head")
+            
+            if charRoot and head then
+                local distance = (charRoot.Position - localPosition).Magnitude
+                distance = math.floor(distance)
+                
+                espData.nameLabel.Text = player.Name .. " [" .. distance .. "m]"
+                
+                if distance > 100 then
+                    espData.nameLabel.TextSize = 12
+                    espData.billboard.Size = UDim2.new(0, 150, 0, 20)
+                else
+                    espData.nameLabel.TextSize = 14
+                    espData.billboard.Size = UDim2.new(0, 200, 0, 30)
+                end
+            end
+        end
+    end
+end
+
+-- ESP创建函数
+local function createESP(player)
+    if player == Players.LocalPlayer then return end
+    if espObjects[player] then return end
+    
+    espObjects[player] = {
+        objects = {},
+        nameLabel = nil,
+        outline = nil,
+        billboard = nil
+    }
+    
+    local function ensureCharacterLoaded()
+        if not player.Character then
+            player.CharacterAdded:Wait()
+        end
+        if not player.Character:FindFirstChild("HumanoidRootPart") then
+            player.Character:WaitForChild("HumanoidRootPart", 10)
+        end
+        if not player.Character:FindFirstChild("Head") then
+            player.Character:WaitForChild("Head", 10)
+        end
+    end
+    
+    local function createESPObjects()
+        local character = player.Character
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        local head = character:FindFirstChild("Head")
+        
+        if not rootPart or not head then return end
+        
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "ESP_Name"
+        billboard.Adornee = head
+        billboard.Size = UDim2.new(0, 200, 0, 30)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+        billboard.MaxDistance = 10000
+        billboard.Enabled = true
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "NameLabel"
+        nameLabel.Size = UDim2.new(1, 0, 1, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = player.Name .. " [0m]"
+        nameLabel.TextColor3 = currentEspColor
+        nameLabel.TextSize = 14
+        nameLabel.Font = Enum.Font.SourceSansBold
+        nameLabel.TextStrokeTransparency = 0.3
+        nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+        nameLabel.TextStrokeTransparency = 0.2
+        nameLabel.Parent = billboard
+        
+        billboard.Parent = head
+        
+        espObjects[player].billboard = billboard
+        espObjects[player].nameLabel = nameLabel
+        table.insert(espObjects[player].objects, billboard)
+        
+        local outline = Instance.new("Highlight")
+        outline.Name = "ESP_Outline"
+        outline.Adornee = character
+        outline.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        outline.FillColor = Color3.new(0, 0, 0)
+        outline.FillTransparency = 1
+        outline.OutlineColor = currentEspColor
+        outline.OutlineTransparency = 0
+        outline.Parent = character
+        
+        outline.OutlineThickness = 1.5
+        
+        espObjects[player].outline = outline
+        table.insert(espObjects[player].objects, outline)
+        
+        local humanoid = character:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid.Died:Connect(function()
+                if espObjects[player] then
+                    for _, obj in ipairs(espObjects[player].objects) do
+                        if obj then
+                            obj:Destroy()
+                        end
+                    end
+                    espObjects[player] = nil
+                end
+            end)
+        end
+    end
+    
+    if player.Character then
+        createESPObjects()
+    else
+        player.CharacterAdded:Connect(function(character)
+            wait(0.5)
+            createESPObjects()
+        end)
+    end
+end
+
+local function removeESP(player)
+    if not espObjects[player] then return end
+    
+    for _, object in ipairs(espObjects[player].objects) do
+        if object then
+            object:Destroy()
+        end
+    end
+    
+    espObjects[player] = nil
+end
+
+local function updateAllESPColors()
+    for player, espData in pairs(espObjects) do
+        if espData.nameLabel then
+            espData.nameLabel.TextColor3 = currentEspColor
+        end
+        
+        if espData.outline then
+            espData.outline.OutlineColor = currentEspColor
+        end
+    end
+end
+
+local function handlePlayerLeft(player)
+    if espObjects[player] then
+        removeESP(player)
+    end
+end
+
+local function scanForNewPlayers()
+    if not espEnabled then return end
+    
+    local players = Players:GetPlayers()
+    for _, player in ipairs(players) do
+        if player ~= Players.LocalPlayer and not espObjects[player] then
+            createESP(player)
+        end
+    end
+end
+
+local function startPlayerScanning()
+    if playerScanConnection then
+        playerScanConnection:Disconnect()
+    end
+    
+    playerScanConnection = RunService.Heartbeat:Connect(function()
+        if espEnabled then
+            scanForNewPlayers()
+        end
+    end)
+end
+
+local function toggleESP()
+    espEnabled = not espEnabled
+    
+    if espEnabled then
+        startPlayerScanning()
+        scanForNewPlayers()
+        
+        if not distanceUpdateConnection then
+            distanceUpdateConnection = RunService.Heartbeat:Connect(updateDistanceLabels)
+        end
+        
+        updateDistanceLabels()
+        
+        Rayfield:Notify({
+            Title = "鸭蛋天眼",
+            Content = "ESP已开启 (增强可见性)",
+            Duration = 2,
+            Image = 4483362458,
+        })
+    else
+        for player, _ in pairs(espObjects) do
+            removeESP(player)
+        end
+        
+        if distanceUpdateConnection then
+            distanceUpdateConnection:Disconnect()
+            distanceUpdateConnection = nil
+        end
+        
+        if playerScanConnection then
+            playerScanConnection:Disconnect()
+            playerScanConnection = nil
+        end
+        
+        Rayfield:Notify({
+            Title = "鸭蛋天眼",
+            Content = "ESP已关闭",
+            Duration = 2,
+            Image = 4483362458,
+        })
+    end
+end
+
+-- 穿墙功能函数
+local function toggleNoclip()
+    noclipEnabled = not noclipEnabled
+    
+    if noclipEnabled then
+        if not noclipConnection then
+            noclipConnection = RunService.Stepped:Connect(function()
+                local player = Players.LocalPlayer
+                if player and player.Character then
+                    for _, part in ipairs(player.Character:GetDescendants()) do
+                        if part:IsA("BasePart") and part.CanCollide then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
+        Rayfield:Notify({
+            Title = "鸭蛋与墙壁共振",
+            Content = "穿墙模式已开启",
+            Duration = 2,
+            Image = 4483362458,
+        })
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        
+        local player = Players.LocalPlayer
+        if player and player.Character then
+            for _, part in ipairs(player.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+        
+        Rayfield:Notify({
+            Title = "鸭蛋与墙壁共振",
+            Content = "穿墙模式已关闭",
+            Duration = 2,
+            Image = 4483362458,
+        })
+    end
+end
+
+-- 1. 无限鸭蛋跳开关
+local ToggleExample = Tab1:CreateToggle({
+    Name = "无限鸭蛋跳",
+    CurrentValue = false,
+    Flag = "ToggleExample",
+    Callback = function(Value)
+        infiniteJumpEnabled = Value
+        
+        if Value then
+            if not jumpConnection then
+                jumpConnection = UserInputService.JumpRequest:Connect(function()
+                    local player = game.Players.LocalPlayer
+                    if player.Character then
+                        local humanoid = player.Character:FindFirstChild("Humanoid")
+                        if humanoid then
+                            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                        end
+                    end
+                end)
+            end
+        else
+            if jumpConnection then
+                jumpConnection:Disconnect()
+                jumpConnection = nil
+            end
+        end
+    end
+})
+
+-- 新增：鸭蛋与墙壁共振（穿墙）按钮
+local NoclipToggle = Tab1:CreateToggle({
+    Name = "鸭蛋与墙壁共振",
+    CurrentValue = false,
+    Flag = "NoclipToggle",
+    Callback = function(Value)
+        toggleNoclip()
+    end
+})
+
+-- 2. 下拉菜单(Dropdown)示例 - 修改为"鸭蛋的好朋友"
+local DropdownExample = Tab1:CreateDropdown({
+    Name = "鸭蛋的好朋友",
+    Options = {"山本", "zyh"},
+    CurrentOption = "山本",
+    MultipleOptions = false,
+    Flag = "DropdownExample",
+    Callback = function(Option)
+        print("选择的朋友:", Option)
+    end,
+})
+
+-- 3. 多选下拉菜单示例 - 夜视功能
+local MultiDropdownExample = Tab1:CreateDropdown({
+    Name = "鸭蛋之眼控制",
+    Options = {"开启鸭蛋之眼", "戳瞎自己的眼睛", "橙子", "葡萄"},
+    CurrentOption = {},
+    MultipleOptions = true,
+    Flag = "MultiDropdownExample",
+    Callback = function(Options)
+        local hasNightVision = table.find(Options, "开启鸭蛋之眼") ~= nil
+        local hasBlind = table.find(Options, "戳瞎自己的眼睛") ~= nil
+        
+        if hasNightVision and hasBlind then
+            local newOptions = {}
+            for _, option in ipairs(Options) do
+                if option ~= "开启鸭蛋之眼" and option ~= "戳瞎自己的眼睛" then
+                    table.insert(newOptions, option)
+                end
+            end
+            MultiDropdownExample:Set(newOptions)
+            return
+        end
+        
+        if hasNightVision then
+            if not nightVisionEnabled then
+                nightVisionEnabled = true
+                updateNightVision()
+            end
+        else
+            if nightVisionEnabled then
+                nightVisionEnabled = false
+                updateNightVision()
+            end
+        end
+    end,
+})
+
+-- 4. 滑块(Slider)示例 - 控制玩家速度
+local SliderExample = Tab1:CreateSlider({
+    Name = "鸭蛋速度",
+    Range = {16, 100},
+    Increment = 1,
+    CurrentValue = 16,
+    Flag = "SliderExample",
+    Callback = function(Value)
+        local player = game.Players.LocalPlayer
+        if player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = Value
+            end
+        end
+    end,
+})
+
+-- 夜视亮度调节滑块
+local BrightnessSlider = Tab1:CreateSlider({
+    Name = "夜视亮度",
+    Range = {1, 20},
+    Increment = 0.5,
+    CurrentValue = 5,
+    Flag = "BrightnessSlider",
+    Callback = function(Value)
+        nightVisionBrightness = Value
+        if nightVisionEnabled then
+            updateNightVision()
+        end
+    end,
+})
+
+-- 新增：夜视对比度调节滑块
+local ContrastSlider = Tab1:CreateSlider({
+    Name = "夜视对比度",
+    Range = {0.1, 1.5},
+    Increment = 0.05,
+    CurrentValue = 0.5,
+    Flag = "ContrastSlider",
+    Callback = function(Value)
+        nightVisionContrast = Value
+        if nightVisionEnabled then
+            updateNightVision()
+        end
+    end
+})
+
+-- 5. 颜色选择器(ColorPicker)示例 - ESP颜色
+local ColorPickerExample = Tab2:CreateColorPicker({
+    Name = "ESP轮廓颜色",
+    Color = Color3.fromRGB(255, 0, 0),
+    Callback = function(Color)
+        currentEspColor = Color
+        if espEnabled then
+            updateAllESPColors()
+        end
+    end
+})
+
+-- 6. 按钮(Button)示例 - 开启鸭蛋天眼(ESP)
+local ButtonExample = Tab2:CreateButton({
+    Name = "开启鸭蛋天眼",
+    Callback = function()
+        toggleESP()
+    end,
+})
+
+-- 7. 输入框(TextBox)示例
+local TextBoxExample = Tab2:CreateInput({
+    Name = "输入框示例",
+    PlaceholderText = "输入一些文字...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        print("输入的文本:", Text)
+    end,
+})
+
+-- 玩家离开处理
+Players.PlayerRemoving:Connect(handlePlayerLeft)
+
+-- 清理函数
+game:GetService("Players").PlayerRemoving:Connect(function(player)
+    if nightVisionEnabled and player == Players.LocalPlayer then
+        nightVisionEnabled = false
+        updateNightVision()
+    end
+    
+    if espObjects[player] then
+        removeESP(player)
+    end
+    
+    if noclipEnabled and player == Players.LocalPlayer then
+        noclipEnabled = false
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+    end
+end)
+
+-- 优化悬浮窗拖动性能
+RunService.RenderStepped:Connect(function()
+    if Window and Window.Drag then
+        Window.Drag:Update()
+    end
+end)
