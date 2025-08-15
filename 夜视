@@ -1,0 +1,288 @@
+-- 鸭蛋夜视悬浮窗 (终极优化版)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "YadanNightVision"
+ScreenGui.Parent = game:GetService("CoreGui")
+
+-- 创建悬浮窗容器（更大尺寸以便拖动）
+local FloatingFrame = Instance.new("Frame")
+FloatingFrame.Name = "FloatingWindow"
+FloatingFrame.Size = UDim2.new(0.25, 0, 0.09, 0) -- 增大尺寸：宽度25%，高度9%
+FloatingFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+FloatingFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+FloatingFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+FloatingFrame.BackgroundTransparency = 0.25 -- 更透明以便游戏视野
+FloatingFrame.BorderSizePixel = 0
+FloatingFrame.ZIndex = 10
+FloatingFrame.Parent = ScreenGui
+
+-- 添加圆角效果
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0.2, 0)
+UICorner.Parent = FloatingFrame
+
+-- 创建标题栏（增大高度）
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Size = UDim2.new(1, 0, 0.45, 0) -- 增加高度比例
+TitleBar.Position = UDim2.new(0, 0, 0, 0)
+TitleBar.BackgroundTransparency = 1
+TitleBar.ZIndex = 11
+TitleBar.Parent = FloatingFrame
+
+-- 标题文本（增大字体）
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "Title"
+TitleLabel.Size = UDim2.new(1, 0, 1, 0)
+TitleLabel.Text = "鸭蛋夜视"
+TitleLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.TextSize = 18 -- 增大字体
+TitleLabel.ZIndex = 11
+TitleLabel.Parent = TitleBar
+
+-- 创建功能按钮（更大尺寸）
+local ActionButton = Instance.new("TextButton")
+ActionButton.Name = "NightVisionBtn"
+ActionButton.Size = UDim2.new(0.85, 0, 0.5, 0)
+ActionButton.Position = UDim2.new(0.075, 0, 0.45, 0)
+ActionButton.Text = "开启夜视"
+ActionButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ActionButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+ActionButton.Font = Enum.Font.SourceSans
+ActionButton.TextSize = 17 -- 增大字体
+ActionButton.ZIndex = 11
+ActionButton.Parent = FloatingFrame
+
+-- 按钮圆角
+local ButtonCorner = Instance.new("UICorner")
+ButtonCorner.CornerRadius = UDim.new(0.15, 0)
+ButtonCorner.Parent = ActionButton
+
+-- 丝滑拖动功能
+local dragging = false
+local dragInput, dragStart, startPos
+
+-- 拖动函数
+local function BeginDrag(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = FloatingFrame.Position
+        
+        -- 轻微视觉反馈
+        FloatingFrame.BackgroundTransparency = 0.15
+        
+        -- 捕获输入事件，防止拖动游戏屏幕
+        if input.UserInputType == Enum.UserInputType.Touch then
+            input:Capture()
+        end
+    end
+end
+
+local function UpdateDrag(input)
+    if dragging then
+        local delta = input.Position - dragStart
+        FloatingFrame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end
+
+local function EndDrag(input)
+    dragging = false
+    FloatingFrame.BackgroundTransparency = 0.25
+    
+    -- 释放输入捕获
+    if input and input.UserInputType == Enum.UserInputType.Touch then
+        input:Capture()
+    end
+end
+
+-- 整个悬浮窗都可拖动
+FloatingFrame.InputBegan:Connect(BeginDrag)
+FloatingFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+FloatingFrame.InputEnded:Connect(EndDrag)
+
+-- 拖动处理
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputChanged:Connect(function(input)
+    if (input == dragInput) and dragging then
+        UpdateDrag(input)
+        return Enum.ContextActionResult.Sink
+    end
+end)
+
+-- 增强夜视效果 + 防移除机制
+local Lighting = game:GetService("Lighting")
+local originalSettings = {}
+local nightVisionActive = false
+local antiRemoveLoop = nil -- 防移除循环
+
+-- 应用夜视效果（带防护）
+local function ApplyNightVision()
+    -- 增强夜视效果
+    Lighting.Brightness = 5.0  -- 超高亮度
+    Lighting.Ambient = Color3.new(0.98, 0.98, 0.98)  -- 接近纯白
+    Lighting.OutdoorAmbient = Color3.new(0.98, 0.98, 0.98)
+    
+    -- 针对性措施：处理黑色迷雾
+    Lighting.FogColor = Color3.new(0.7, 0.7, 0.7)  -- 浅灰色迷雾
+    Lighting.FogEnd = 10000  -- 极大可见范围
+    Lighting.FogStart = 0  -- 无近处迷雾
+    
+    -- 禁用阴影以增强暗处可见性
+    Lighting.GlobalShadows = false
+    
+    -- 特殊防护：针对特定服务器设置
+    if Lighting:FindFirstChild("DarknessEffect") then
+        Lighting.DarknessEffect:Destroy()
+    end
+end
+
+-- 防移除监控循环
+local function StartAntiRemove()
+    if antiRemoveLoop then antiRemoveLoop:Disconnect() end
+    
+    antiRemoveLoop = game:GetService("RunService").Heartbeat:Connect(function()
+        if nightVisionActive then
+            -- 检查关键属性是否被重置
+            if Lighting.Brightness < 4 or 
+               Lighting.Ambient.R < 0.9 or 
+               Lighting.FogEnd < 5000 then
+                
+                -- 重新应用夜视效果
+                ApplyNightVision()
+                
+                -- 额外防护：创建属性锁
+                if not Lighting:FindFirstChild("YadanLock") then
+                    local lock = Instance.new("BoolValue")
+                    lock.Name = "YadanLock"
+                    lock.Parent = Lighting
+                end
+            end
+            
+            -- 针对特定服务器脚本的防护
+            for _, script in pairs(Lighting:GetChildren()) do
+                if script:IsA("Script") and script.Name:lower():find("dark") then
+                    script.Disabled = true
+                end
+            end
+        end
+    end)
+end
+
+-- 夜视切换
+local function ToggleNightVision()
+    nightVisionActive = not nightVisionActive
+    
+    if nightVisionActive then
+        -- 保存原始设置
+        originalSettings.Brightness = Lighting.Brightness
+        originalSettings.Ambient = Lighting.Ambient
+        originalSettings.OutdoorAmbient = Lighting.OutdoorAmbient
+        originalSettings.FogColor = Lighting.FogColor
+        originalSettings.FogEnd = Lighting.FogEnd
+        originalSettings.FogStart = Lighting.FogStart
+        originalSettings.GlobalShadows = Lighting.GlobalShadows
+        
+        -- 应用夜视效果
+        ApplyNightVision()
+        
+        -- 启动防移除监控
+        StartAntiRemove()
+        
+        ActionButton.Text = "关闭夜视"
+        ActionButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50) -- 更亮的绿色
+    else
+        -- 停止防移除监控
+        if antiRemoveLoop then
+            antiRemoveLoop:Disconnect()
+            antiRemoveLoop = nil
+        end
+        
+        -- 移除属性锁
+        if Lighting:FindFirstChild("YadanLock") then
+            Lighting.YadanLock:Destroy()
+        end
+        
+        -- 恢复原始设置
+        Lighting.Brightness = originalSettings.Brightness
+        Lighting.Ambient = originalSettings.Ambient
+        Lighting.OutdoorAmbient = originalSettings.OutdoorAmbient
+        Lighting.FogColor = originalSettings.FogColor
+        Lighting.FogEnd = originalSettings.FogEnd
+        Lighting.FogStart = originalSettings.FogStart
+        Lighting.GlobalShadows = originalSettings.GlobalShadows
+        
+        ActionButton.Text = "开启夜视"
+        ActionButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    end
+end
+
+-- 按钮点击事件
+ActionButton.MouseButton1Click:Connect(ToggleNightVision)
+
+-- 安全区域适配
+local function AdjustPositionToSafeArea()
+    local safeZone = game:GetService("GuiService"):GetSafeZoneOffsets()
+    local screenSize = workspace.CurrentCamera.ViewportSize
+    
+    local framePos = FloatingFrame.AbsolutePosition
+    local frameSize = FloatingFrame.AbsoluteSize
+    
+    local minX = safeZone.X
+    local minY = safeZone.Y
+    local maxX = screenSize.X - safeZone.Z - frameSize.X
+    local maxY = screenSize.Y - safeZone.W - frameSize.Y
+    
+    -- 调整X位置
+    if framePos.X < minX then
+        FloatingFrame.Position = UDim2.new(0, minX, FloatingFrame.Position.Y.Scale, FloatingFrame.Position.Y.Offset)
+    elseif framePos.X > maxX then
+        FloatingFrame.Position = UDim2.new(0, maxX, FloatingFrame.Position.Y.Scale, FloatingFrame.Position.Y.Offset)
+    end
+    
+    -- 调整Y位置
+    if framePos.Y < minY then
+        FloatingFrame.Position = UDim2.new(FloatingFrame.Position.X.Scale, FloatingFrame.Position.X.Offset, 0, minY)
+    elseif framePos.Y > maxY then
+        FloatingFrame.Position = UDim2.new(FloatingFrame.Position.X.Scale, FloatingFrame.Position.X.Offset, 0, maxY)
+    end
+end
+
+-- 初始位置适配
+AdjustPositionToSafeArea()
+workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(AdjustPositionToSafeArea)
+game:GetService("GuiService"):GetSafeZoneOffsets().Changed:Connect(AdjustPositionToSafeArea)
+
+-- 卸载清理函数
+_G.CleanYadanScript = function()
+    if nightVisionActive then
+        ToggleNightVision() -- 确保夜视关闭
+    end
+    
+    if ScreenGui then
+        ScreenGui:Destroy()
+    end
+    print("鸭蛋夜视悬浮窗已卸载")
+end
+
+-- 玩家离开时自动清理
+game:GetService("Players").PlayerRemoving:Connect(function(player)
+    if player == game.Players.LocalPlayer then
+        _G.CleanYadanScript()
+    end
+end)
+
+-- 验证标记
+print("鸭蛋夜视悬浮窗已加载 (终极优化版)")
