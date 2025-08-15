@@ -475,7 +475,7 @@ local DropdownExample = Tab1:CreateDropdown({
 -- 3. 多选下拉菜单示例 - 夜视功能
 local MultiDropdownExample = Tab1:CreateDropdown({
     Name = "鸭蛋之眼控制",
-    Options = {"开启鸭蛋之眼", "戳瞎自己的眼睛", "橙子", "葡萄"},
+    Options = {"开启鸭蛋之眼", "戳瞎自己的眼睛", "橙", "葡萄"},
     CurrentOption = {},
     MultipleOptions = true,
     Flag = "MultiDropdownExample",
